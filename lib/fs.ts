@@ -6,6 +6,7 @@ import { filesBucket, collections } from "./db/db.ts";
 import * as logger from "./logger.ts";
 import { getRequestOrigin } from "./forwarded.ts";
 import memoize from "./common/memoize.ts";
+import { allowedFS } from "./allowed";
 
 const getFile = memoize(
   async (
@@ -83,6 +84,9 @@ export async function listener(
   request: IncomingMessage,
   response: ServerResponse,
 ): Promise<void> {
+  const allowedResult = await allowedFS(request, response);
+  if (!allowedResult) return;
+
   if (request.method !== "GET" && request.method !== "HEAD") {
     response.writeHead(405, { Allow: "GET, HEAD" });
     response.end("405 Method Not Allowed");

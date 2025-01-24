@@ -42,6 +42,7 @@ import {
 import { getRequestOrigin } from "./forwarded.ts";
 import * as logger from "./logger.ts";
 import { encodeTag } from "./util.ts";
+import { Ignore } from "./ignore";
 
 const VALID_PARAM_TYPES = new Set([
   "xsd:int",
@@ -2685,6 +2686,7 @@ export async function rpcResponse(
     const wildcardParams: Path[] = [root.concat(wildcardPath)];
 
     for (const [path, object, writable] of rpcRes.parameterList) {
+      if (Ignore(path.toString())) continue;
       if (
         !path.toString().startsWith(rpcReq.parameterPath) &&
         !(`${path.toString()}.` === rpcReq.parameterPath && !rpcReq.nextLevel)

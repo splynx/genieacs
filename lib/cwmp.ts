@@ -50,6 +50,7 @@ import { parseXmlDeclaration } from "./xml-parser.ts";
 import * as debug from "./debug.ts";
 import { getRequestOrigin } from "./forwarded.ts";
 import { getSocketEndpoints } from "./server.ts";
+import { allowed } from "./allowed";
 
 const gzipPromisified = promisify(zlib.gzip);
 const deflatePromisified = promisify(zlib.deflate);
