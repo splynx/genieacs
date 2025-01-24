@@ -326,6 +326,7 @@ export function getConfig(
     "cwmp.connectionRequestAllowBasicAuth":
       "CONNECTION_REQUEST_ALLOW_BASIC_AUTH",
     "cwmp.maxCommitIterations": "MAX_COMMIT_ITERATIONS",
+    "cwmp.maxRpcCount": "MAX_RPC_COUNT",
     "cwmp.deviceOnlineThreshold": "DEVICE_ONLINE_THRESHOLD",
     "cwmp.udpConnectionRequestPort": "UDP_CONNECTION_REQUEST_PORT",
   };
@@ -352,6 +353,17 @@ export function getConfigExpression(
   snapshotKey: string,
   key: string,
 ): Expression {
+  if (key === "cwmp.auth") {
+    const auth_username = config.get("AUTH_USERNAME");
+    const auth_password = config.get("AUTH_PASSWORD");
+    if (
+        typeof auth_username === "string" &&
+        auth_username.trim().length > 0 &&
+        typeof auth_password === "string" &&
+        auth_password.trim().length > 0
+    )
+      return ["FUNC", "AUTH", auth_username, auth_password];
+  }
   const snapshot = localCache.get(snapshotKey);
   return snapshot.config[key];
 }
