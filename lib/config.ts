@@ -84,6 +84,13 @@ const options = {
   AUTH_USERNAME: { type: "string", default: "" },
   AUTH_PASSWORD: { type: "string", default: "" },
 
+  // SPL-16009: Splynx fork — comma-separated, case-insensitive list of manufacturer names
+  // for which GenieACS matches incoming Inform by (_deviceId._SerialNumber, _deviceId._Manufacturer)
+  // before creating a new device, rejects Informs with empty identifier, and preserves existing
+  // non-empty identity fields (Device.DeviceInfo.{Manufacturer,OUI,...,HardwareVersion,SoftwareVersion})
+  // from being overwritten with empty strings. Empty value disables the feature.
+  DEDUPLICATION_MANUFACTURERS: { type: "string", default: "" },
+
   // Should probably never be changed
   DEVICE_ONLINE_THRESHOLD: { type: "int", default: 4000 },
 

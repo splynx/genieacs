@@ -148,6 +148,10 @@ export interface SessionContext {
   operationsTouched?: { [commandKey: string]: 1 | 0 };
   provisionsRet?: any[];
   doneTasks?: string[];
+  // SPL-16009: set in cwmp.ts Inform init when manufacturer matches DEDUPLICATION_MANUFACTURERS.
+  // Read by saveDevice at session end to decide whether to skip $set of empty values on
+  // PROTECTED_IDENTITY_PATHS. Persists across session serialize/deserialize (JSON.parse preserves).
+  preserveIdentity?: boolean;
 }
 
 export interface Task {

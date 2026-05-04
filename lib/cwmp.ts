@@ -7,12 +7,18 @@ import { promisify } from "node:util";
 import { decode, encodingExists } from "iconv-lite";
 import * as auth from "./auth.ts";
 import * as config from "./config.ts";
-import { generateDeviceId, once, setTimeoutPromise } from "./util.ts";
+import {
+  generateDeviceId,
+  once,
+  parseDedupManufacturers,
+  setTimeoutPromise,
+  shouldDeduplicate,
+} from "./util.ts";
 import * as soap from "./soap.ts";
 import * as session from "./session.ts";
 import {
-  evaluateAsync,
   evaluate,
+  evaluateAsync,
   extractParams,
 } from "./common/expression/util.ts";
 import * as cache from "./cache.ts";
@@ -23,6 +29,7 @@ import {
   deleteFault,
   deleteOperation,
   fetchDevice,
+  findDeviceIdBySerialAndManufacturer,
   getDueTasks,
   getFaults,
   getOperations,
@@ -35,16 +42,16 @@ import * as scheduling from "./scheduling.ts";
 import Path from "./common/path.ts";
 import * as extensions from "./extensions.ts";
 import {
-  SessionContext,
   AcsRequest,
-  SessionFault,
-  Fault,
+  CpeFault,
   Expression,
-  SoapMessage,
+  Fault,
+  GetRPCMethodsResponse,
   InformRequest,
   Preset,
-  GetRPCMethodsResponse,
-  CpeFault,
+  SessionContext,
+  SessionFault,
+  SoapMessage,
 } from "./types.ts";
 import { parseXmlDeclaration } from "./xml-parser.ts";
 import * as debug from "./debug.ts";
@@ -771,6 +778,7 @@ async function endSession(sessionContext: SessionContext): Promise<void> {
       sessionContext.deviceData,
       sessionContext.new,
       sessionContext.timestamp,
+      sessionContext.preserveIdentity ?? false, // SPL-16009
     ),
   );
 
@@ -1015,7 +1023,7 @@ async function processRequest(
   sessionContext: SessionContext,
   rpc: SoapMessage,
   parseWarnings: Record<string, unknown>[],
-  body: string
+  body: string,
 ): Promise<void> {
   const allowedResult = await allowed(sessionContext);
   if (!allowedResult) return;
@@ -1539,15 +1547,60 @@ async function listenerAsync(
   }
 
   stats.initiatedSessions += 1;
-  const deviceId = generateDeviceId(rpc.cpeRequest.deviceId);
+  const informDeviceId = rpc.cpeRequest.deviceId;
+  const computedDeviceId = generateDeviceId(informDeviceId);
+
+  // SPL-16009: if this manufacturer is flagged, try to match an existing device by
+  // (_deviceId._Manufacturer, _deviceId._SerialNumber) instead of using the computed _id.
+  // Reject the Inform outright if Manufacturer or SerialNumber are empty/whitespace-only —
+  // these devices can't be identified reliably, and accepting them would pollute the DB.
+  const dedupSet = parseDedupManufacturers(
+    String(config.get("DEDUPLICATION_MANUFACTURERS") ?? ""),
+  );
+  const flagged = shouldDeduplicate(informDeviceId.Manufacturer, dedupSet);
+
+  let effectiveDeviceId = computedDeviceId;
+  if (flagged) {
+    const manufacturer = informDeviceId.Manufacturer?.trim() ?? "";
+    const serialNumber = informDeviceId.SerialNumber?.trim() ?? "";
+
+    if (!manufacturer || !serialNumber) {
+      logger.accessWarn({
+        message:
+          "Dedup: rejected Inform with empty manufacturer or serial number",
+        sessionContext: { httpRequest, httpResponse },
+      });
+      return clientError(
+        httpRequest,
+        httpResponse,
+        null,
+        bodyStr,
+        "Missing or invalid DeviceId for deduplication-enabled manufacturer",
+      );
+    }
+
+    const existingId = await findDeviceIdBySerialAndManufacturer(
+      manufacturer,
+      serialNumber,
+    );
+
+    if (existingId && existingId !== computedDeviceId) {
+      logger.accessInfo({
+        message: `Dedup: mapped Inform id ${computedDeviceId} to existing ${existingId}`,
+        sessionContext: { httpRequest, httpResponse },
+      });
+      effectiveDeviceId = existingId;
+    }
+  }
 
   const cacheSnapshot = await localCache.getRevision();
 
   const _sessionContext = session.init(
-    deviceId,
+    effectiveDeviceId,
     rpc.cwmpVersion,
     rpc.sessionTimeout,
   );
+  _sessionContext.preserveIdentity = flagged; // SPL-16009
 
   _sessionContext.cacheSnapshot = cacheSnapshot;
 
@@ -1556,9 +1609,9 @@ async function listenerAsync(
   _sessionContext.sessionId = crypto.randomBytes(8).toString("hex");
 
   const [dueTasks, faults, operations] = await Promise.all([
-    getDueTasks(deviceId, _sessionContext.timestamp),
-    getFaults(deviceId),
-    getOperations(deviceId),
+    getDueTasks(effectiveDeviceId, _sessionContext.timestamp),
+    getFaults(effectiveDeviceId),
+    getOperations(effectiveDeviceId),
   ]);
 
   _sessionContext.tasks = dueTasks[0];
