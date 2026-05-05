@@ -7,13 +7,8 @@ import { promisify } from "node:util";
 import { decode, encodingExists } from "iconv-lite";
 import * as auth from "./auth.ts";
 import * as config from "./config.ts";
-import {
-  generateDeviceId,
-  once,
-  parseDedupManufacturers,
-  setTimeoutPromise,
-  shouldDeduplicate,
-} from "./util.ts";
+import { generateDeviceId, once, setTimeoutPromise } from "./util.ts";
+import { resolveDedup } from "./dedup.ts";
 import * as soap from "./soap.ts";
 import * as session from "./session.ts";
 import {
@@ -29,7 +24,6 @@ import {
   deleteFault,
   deleteOperation,
   fetchDevice,
-  findDeviceIdBySerialAndManufacturer,
   getDueTasks,
   getFaults,
   getOperations,
@@ -1547,51 +1541,30 @@ async function listenerAsync(
   }
 
   stats.initiatedSessions += 1;
-  const informDeviceId = rpc.cpeRequest.deviceId;
-  const computedDeviceId = generateDeviceId(informDeviceId);
+  const computedDeviceId = generateDeviceId(rpc.cpeRequest.deviceId);
 
-  // SPL-16009: if this manufacturer is flagged, try to match an existing device by
-  // (_deviceId._Manufacturer, _deviceId._SerialNumber) instead of using the computed _id.
-  // Reject the Inform outright if Manufacturer or SerialNumber are empty/whitespace-only —
-  // these devices can't be identified reliably, and accepting them would pollute the DB.
-  const dedupSet = parseDedupManufacturers(
-    String(config.get("DEDUPLICATION_MANUFACTURERS") ?? ""),
-  );
-  const flagged = shouldDeduplicate(informDeviceId.Manufacturer, dedupSet);
-
-  let effectiveDeviceId = computedDeviceId;
-  if (flagged) {
-    const manufacturer = informDeviceId.Manufacturer?.trim() ?? "";
-    const serialNumber = informDeviceId.SerialNumber?.trim() ?? "";
-
-    if (!manufacturer || !serialNumber) {
-      logger.accessWarn({
-        message:
-          "Dedup: rejected Inform with empty manufacturer or serial number",
-        sessionContext: { httpRequest, httpResponse },
-      });
-      return clientError(
-        httpRequest,
-        httpResponse,
-        null,
-        bodyStr,
-        "Missing or invalid DeviceId for deduplication-enabled manufacturer",
-      );
-    }
-
-    const existingId = await findDeviceIdBySerialAndManufacturer(
-      manufacturer,
-      serialNumber,
+  // SPL-16009: dedup logic centralised in lib/dedup.ts to keep upstream files thin.
+  const dedup = await resolveDedup(rpc.cpeRequest.deviceId, computedDeviceId);
+  if (dedup.rejectReason) {
+    logger.accessWarn({
+      message: `Dedup: rejected Inform — ${dedup.rejectReason}`,
+      sessionContext: { httpRequest, httpResponse },
+    });
+    return clientError(
+      httpRequest,
+      httpResponse,
+      null,
+      bodyStr,
+      "Missing or invalid DeviceId for deduplication-enabled manufacturer",
     );
-
-    if (existingId && existingId !== computedDeviceId) {
-      logger.accessInfo({
-        message: `Dedup: mapped Inform id ${computedDeviceId} to existing ${existingId}`,
-        sessionContext: { httpRequest, httpResponse },
-      });
-      effectiveDeviceId = existingId;
-    }
   }
+  if (dedup.remappedFrom) {
+    logger.accessInfo({
+      message: `Dedup: mapped Inform id ${dedup.remappedFrom} to existing ${dedup.effectiveDeviceId}`,
+      sessionContext: { httpRequest, httpResponse },
+    });
+  }
+  const effectiveDeviceId = dedup.effectiveDeviceId;
 
   const cacheSnapshot = await localCache.getRevision();
 
@@ -1600,7 +1573,7 @@ async function listenerAsync(
     rpc.cwmpVersion,
     rpc.sessionTimeout,
   );
-  _sessionContext.preserveIdentity = flagged; // SPL-16009
+  _sessionContext.preserveIdentity = dedup.flagged; // SPL-16009
 
   _sessionContext.cacheSnapshot = cacheSnapshot;
 

@@ -1,10 +1,6 @@
 import { ObjectId } from "mongodb";
-import {
-  decodeTag,
-  encodeTag,
-  escapeRegExp,
-  shouldPreserveOnEmpty,
-} from "../util.ts";
+import { decodeTag, encodeTag, escapeRegExp } from "../util.ts";
+import { shouldPreserveOnEmpty, shouldSkipDeviceIdSet } from "../dedup.ts";
 import {
   DeviceData,
   Attributes,
@@ -244,25 +240,6 @@ export async function fetchDevice(
   return res;
 }
 
-// SPL-16009: secondary device lookup used when DEDUPLICATION_MANUFACTURERS gates an incoming
-// Inform whose computed _id differs from any existing document. Returns the existing document's
-// _id so the caller can reuse it as the session deviceId — the normal upsert path then refreshes
-// _deviceId.* subfields in place instead of creating a duplicate document. Returns null when no
-// matching device exists.
-export async function findDeviceIdBySerialAndManufacturer(
-  manufacturer: string,
-  serialNumber: string,
-): Promise<string | null> {
-  const doc = await collections.devices.findOne(
-    {
-      "_deviceId._Manufacturer": manufacturer,
-      "_deviceId._SerialNumber": serialNumber,
-    },
-    { projection: { _id: 1 } },
-  );
-  return doc ? (doc._id as string) : null;
-}
-
 export async function saveDevice(
   deviceId: string,
   deviceData: DeviceData,
@@ -362,17 +339,7 @@ export async function saveDevice(
         if (value2 !== value1) {
           const v = diff[2].value[1][0];
           // SPL-16009: skip if a stored non-empty _deviceId._* would be overwritten with ""
-          // (except _id itself, which is immutable in MongoDB anyway)
-          if (
-            preserveIdentity &&
-            path.segments[1] !== "ID" &&
-            typeof v === "string" &&
-            v === "" &&
-            typeof value1 === "string" &&
-            value1 !== ""
-          ) {
-            break;
-          }
+          if (shouldSkipDeviceIdSet(preserveIdentity, path.segments[1], v, value1)) break;
           switch (path.segments[1]) {
             case "ID":
               update["$set"]["_id"] = v;

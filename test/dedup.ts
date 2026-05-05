@@ -4,7 +4,7 @@ import {
   parseDedupManufacturers,
   shouldDeduplicate,
   shouldPreserveOnEmpty,
-} from "../lib/util.ts";
+} from "../lib/dedup.ts";
 
 // SPL-16009
 
