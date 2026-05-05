@@ -12,8 +12,8 @@ import { resolveDedup } from "./dedup.ts";
 import * as soap from "./soap.ts";
 import * as session from "./session.ts";
 import {
-  evaluate,
   evaluateAsync,
+  evaluate,
   extractParams,
 } from "./common/expression/util.ts";
 import * as cache from "./cache.ts";
@@ -36,16 +36,16 @@ import * as scheduling from "./scheduling.ts";
 import Path from "./common/path.ts";
 import * as extensions from "./extensions.ts";
 import {
+  SessionContext,
   AcsRequest,
-  CpeFault,
-  Expression,
+  SessionFault,
   Fault,
-  GetRPCMethodsResponse,
+  Expression,
+  SoapMessage,
   InformRequest,
   Preset,
-  SessionContext,
-  SessionFault,
-  SoapMessage,
+  GetRPCMethodsResponse,
+  CpeFault,
 } from "./types.ts";
 import { parseXmlDeclaration } from "./xml-parser.ts";
 import * as debug from "./debug.ts";
@@ -1017,7 +1017,7 @@ async function processRequest(
   sessionContext: SessionContext,
   rpc: SoapMessage,
   parseWarnings: Record<string, unknown>[],
-  body: string,
+  body: string
 ): Promise<void> {
   const allowedResult = await allowed(sessionContext);
   if (!allowedResult) return;
@@ -1541,10 +1541,10 @@ async function listenerAsync(
   }
 
   stats.initiatedSessions += 1;
-  const computedDeviceId = generateDeviceId(rpc.cpeRequest.deviceId);
+  let deviceId = generateDeviceId(rpc.cpeRequest.deviceId);
 
   // SPL-16009: dedup logic centralised in lib/dedup.ts to keep upstream files thin.
-  const dedup = await resolveDedup(rpc.cpeRequest.deviceId, computedDeviceId);
+  const dedup = await resolveDedup(rpc.cpeRequest.deviceId, deviceId);
   if (dedup.rejectReason) {
     logger.accessWarn({
       message: `Dedup: rejected Inform — ${dedup.rejectReason}`,
@@ -1564,12 +1564,12 @@ async function listenerAsync(
       sessionContext: { httpRequest, httpResponse },
     });
   }
-  const effectiveDeviceId = dedup.effectiveDeviceId;
+  deviceId = dedup.effectiveDeviceId;
 
   const cacheSnapshot = await localCache.getRevision();
 
   const _sessionContext = session.init(
-    effectiveDeviceId,
+    deviceId,
     rpc.cwmpVersion,
     rpc.sessionTimeout,
   );
@@ -1582,9 +1582,9 @@ async function listenerAsync(
   _sessionContext.sessionId = crypto.randomBytes(8).toString("hex");
 
   const [dueTasks, faults, operations] = await Promise.all([
-    getDueTasks(effectiveDeviceId, _sessionContext.timestamp),
-    getFaults(effectiveDeviceId),
-    getOperations(effectiveDeviceId),
+    getDueTasks(deviceId, _sessionContext.timestamp),
+    getFaults(deviceId),
+    getOperations(deviceId),
   ]);
 
   _sessionContext.tasks = dueTasks[0];
