@@ -1,5 +1,5 @@
-import {resolve} from "node:path";
-import {existsSync, readFileSync} from "node:fs";
+import { resolve } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
 
 // Find project root directory
 export let ROOT_DIR = resolve(__dirname, "..");

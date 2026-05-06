@@ -1,10 +1,16 @@
-import {ObjectId} from "mongodb";
-import {decodeTag, encodeTag, escapeRegExp} from "../util.ts";
-import {shouldPreserveOnEmpty, shouldSkipDeviceIdSet} from "../dedup.ts";
-import {Attributes, DeviceData, Operation, SessionFault, Task,} from "../types.ts";
+import { ObjectId } from "mongodb";
+import { decodeTag, encodeTag, escapeRegExp } from "../util.ts";
+import { shouldPreserveOnEmpty, shouldSkipDeviceIdSet } from "../dedup.ts";
+import {
+  DeviceData,
+  Attributes,
+  SessionFault,
+  Task,
+  Operation,
+} from "../types.ts";
 import Path from "../common/path.ts";
-import {collections} from "../db/db.ts";
-import {optimizeProjection} from "../db/util.ts";
+import { collections } from "../db/db.ts";
+import { optimizeProjection } from "../db/util.ts";
 import * as MongoTypes from "../db/types.ts";
 
 const INVALID_PATH_SUFFIX = "__invalid";

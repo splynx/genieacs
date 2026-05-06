@@ -1,5 +1,5 @@
-import {IncomingMessage, ServerResponse} from "node:http";
-import {Script} from "node:vm";
+import { IncomingMessage, ServerResponse } from "node:http";
+import { Script } from "node:vm";
 import Path from "./common/path.ts";
 import PathSet from "./common/path-set.ts";
 import VersionedMap from "./versioned-map.ts";
