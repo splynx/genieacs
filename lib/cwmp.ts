@@ -1,21 +1,17 @@
 import * as zlib from "node:zlib";
 import * as crypto from "node:crypto";
-import { Socket } from "node:net";
-import { IncomingMessage, ServerResponse } from "node:http";
-import { pipeline, Readable } from "node:stream";
-import { promisify } from "node:util";
-import { decode, encodingExists } from "iconv-lite";
+import {Socket} from "node:net";
+import {IncomingMessage, ServerResponse} from "node:http";
+import {pipeline, Readable} from "node:stream";
+import {promisify} from "node:util";
+import {decode, encodingExists} from "iconv-lite";
 import * as auth from "./auth.ts";
 import * as config from "./config.ts";
-import { generateDeviceId, once, setTimeoutPromise } from "./util.ts";
-import { resolveDedup } from "./dedup.ts";
+import {generateDeviceId, once, setTimeoutPromise} from "./util.ts";
+import {resolveDedup} from "./dedup.ts";
 import * as soap from "./soap.ts";
 import * as session from "./session.ts";
-import {
-  evaluateAsync,
-  evaluate,
-  extractParams,
-} from "./common/expression/util.ts";
+import {evaluate, evaluateAsync, extractParams,} from "./common/expression/util.ts";
 import * as cache from "./cache.ts";
 import * as lock from "./lock.ts";
 import * as localCache from "./cwmp/local-cache.ts";
@@ -36,22 +32,22 @@ import * as scheduling from "./scheduling.ts";
 import Path from "./common/path.ts";
 import * as extensions from "./extensions.ts";
 import {
-  SessionContext,
   AcsRequest,
-  SessionFault,
-  Fault,
+  CpeFault,
   Expression,
-  SoapMessage,
+  Fault,
+  GetRPCMethodsResponse,
   InformRequest,
   Preset,
-  GetRPCMethodsResponse,
-  CpeFault,
+  SessionContext,
+  SessionFault,
+  SoapMessage,
 } from "./types.ts";
-import { parseXmlDeclaration } from "./xml-parser.ts";
+import {parseXmlDeclaration} from "./xml-parser.ts";
 import * as debug from "./debug.ts";
-import { getRequestOrigin } from "./forwarded.ts";
-import { getSocketEndpoints } from "./server.ts";
-import { allowed } from "./allowed";
+import {getRequestOrigin} from "./forwarded.ts";
+import {getSocketEndpoints} from "./server.ts";
+import {allowed} from "./allowed";
 
 const gzipPromisified = promisify(zlib.gzip);
 const deflatePromisified = promisify(zlib.deflate);
@@ -772,7 +768,7 @@ async function endSession(sessionContext: SessionContext): Promise<void> {
       sessionContext.deviceData,
       sessionContext.new,
       sessionContext.timestamp,
-      sessionContext.preserveIdentity ?? false, // SPL-16009
+      sessionContext.preserveIdentity ?? false,
     ),
   );
 
@@ -1543,7 +1539,7 @@ async function listenerAsync(
   stats.initiatedSessions += 1;
   let deviceId = generateDeviceId(rpc.cpeRequest.deviceId);
 
-  // SPL-16009: dedup logic centralised in lib/dedup.ts to keep upstream files thin.
+  // Dedup logic centralised in lib/dedup.ts to keep upstream files thin.
   const dedup = await resolveDedup(rpc.cpeRequest.deviceId, deviceId);
   if (dedup.rejectReason) {
     logger.accessWarn({
@@ -1573,7 +1569,7 @@ async function listenerAsync(
     rpc.cwmpVersion,
     rpc.sessionTimeout,
   );
-  _sessionContext.preserveIdentity = dedup.flagged; // SPL-16009
+  _sessionContext.preserveIdentity = dedup.flagged;
 
   _sessionContext.cacheSnapshot = cacheSnapshot;
 

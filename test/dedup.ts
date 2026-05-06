@@ -4,9 +4,8 @@ import {
   parseDedupManufacturers,
   shouldDeduplicate,
   shouldPreserveOnEmpty,
+  shouldSkipDeviceIdSet,
 } from "../lib/dedup.ts";
-
-// SPL-16009
 
 void test("parseDedupManufacturers: normalises and dedupes", () => {
   const set = parseDedupManufacturers(" Mercusys , TP-LINK ,, mercusys ");
@@ -117,4 +116,34 @@ void test("shouldPreserveOnEmpty: non-string values are not preserved", () => {
     shouldPreserveOnEmpty("Device.DeviceInfo.HardwareVersion", "1.0", 0),
     false,
   );
+});
+
+void test("shouldSkipDeviceIdSet: non-empty old → empty new on protected segment", () => {
+  // _deviceId._Manufacturer / _OUI / _ProductClass / _SerialNumber — protected.
+  assert.strictEqual(shouldSkipDeviceIdSet(true, "Manufacturer", "", "MERCUSYS"), true);
+  assert.strictEqual(shouldSkipDeviceIdSet(true, "OUI", "", "30169D"), true);
+  assert.strictEqual(shouldSkipDeviceIdSet(true, "ProductClass", "", "MR80X"), true);
+  assert.strictEqual(shouldSkipDeviceIdSet(true, "SerialNumber", "", "AAAA"), true);
+});
+
+void test("shouldSkipDeviceIdSet: ID segment is never protected", () => {
+  // _id is immutable in MongoDB — special-cased away from the guard.
+  assert.strictEqual(shouldSkipDeviceIdSet(true, "ID", "", "30169D-MR80X-AAAA"), false);
+});
+
+void test("shouldSkipDeviceIdSet: preserveIdentity off disables the guard", () => {
+  assert.strictEqual(shouldSkipDeviceIdSet(false, "Manufacturer", "", "MERCUSYS"), false);
+});
+
+void test("shouldSkipDeviceIdSet: non-empty new → no skip", () => {
+  // Legitimate update from one non-empty value to another non-empty value.
+  assert.strictEqual(shouldSkipDeviceIdSet(true, "OUI", "e005c7", "30169D"), false);
+});
+
+void test("shouldSkipDeviceIdSet: no previous value or non-string types → no skip", () => {
+  assert.strictEqual(shouldSkipDeviceIdSet(true, "Manufacturer", "", undefined), false);
+  assert.strictEqual(shouldSkipDeviceIdSet(true, "Manufacturer", "", null), false);
+  assert.strictEqual(shouldSkipDeviceIdSet(true, "Manufacturer", "", ""), false);
+  assert.strictEqual(shouldSkipDeviceIdSet(true, "Manufacturer", 0, "MERCUSYS"), false);
+  assert.strictEqual(shouldSkipDeviceIdSet(true, "Manufacturer", "", 42), false);
 });

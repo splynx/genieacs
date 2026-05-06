@@ -1,16 +1,10 @@
-import { ObjectId } from "mongodb";
-import { decodeTag, encodeTag, escapeRegExp } from "../util.ts";
-import { shouldPreserveOnEmpty, shouldSkipDeviceIdSet } from "../dedup.ts";
-import {
-  DeviceData,
-  Attributes,
-  SessionFault,
-  Task,
-  Operation,
-} from "../types.ts";
+import {ObjectId} from "mongodb";
+import {decodeTag, encodeTag, escapeRegExp} from "../util.ts";
+import {shouldPreserveOnEmpty, shouldSkipDeviceIdSet} from "../dedup.ts";
+import {Attributes, DeviceData, Operation, SessionFault, Task,} from "../types.ts";
 import Path from "../common/path.ts";
-import { collections } from "../db/db.ts";
-import { optimizeProjection } from "../db/util.ts";
+import {collections} from "../db/db.ts";
+import {optimizeProjection} from "../db/util.ts";
 import * as MongoTypes from "../db/types.ts";
 
 const INVALID_PATH_SUFFIX = "__invalid";
@@ -245,7 +239,7 @@ export async function saveDevice(
   deviceData: DeviceData,
   isNew: boolean,
   sessionTimestamp: number,
-  // SPL-16009: when true, $set of PROTECTED_IDENTITY_PATHS is skipped if the new value is "" and
+  // When true, $set of PROTECTED_IDENTITY_PATHS is skipped if the new value is "" and
   // the previously loaded value (from fetchDevice) was a non-empty string. Same rule applies
   // inline in the DeviceID case for _deviceId._Manufacturer/_OUI/_ProductClass/_SerialNumber.
   preserveIdentity = false,
@@ -338,7 +332,7 @@ export async function saveDevice(
       case "DeviceID":
         if (value2 !== value1) {
           const v = diff[2].value[1][0];
-          // SPL-16009: skip if a stored non-empty _deviceId._* would be overwritten with ""
+          // Skip if a stored non-empty _deviceId._* would be overwritten with ""
           if (shouldSkipDeviceIdSet(preserveIdentity, path.segments[1], v, value1)) break;
           switch (path.segments[1]) {
             case "ID":
@@ -405,7 +399,7 @@ export async function saveDevice(
           if (diff[2][attrName][1] != null) {
             switch (attrName) {
               case "value":
-                // SPL-16009: skip _value/_type/_timestamp as a group when this is a PROTECTED
+                // Skip _value/_type/_timestamp as a group when this is a PROTECTED
                 // identity path and the new value is "" while the previously stored value was
                 // a non-empty string. Prevents "crooked" Informs from a flagged manufacturer
                 // from wiping out known-good device metadata.

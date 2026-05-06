@@ -1,4 +1,4 @@
-// SPL-16009: All deduplication logic concentrated here so upstream files only
+// All deduplication logic concentrated here so upstream files only
 // need a thin hook (one or two lines per integration point). Goal: when the fork
 // rebases onto a newer upstream version, our diff into upstream files stays small
 // and easy to re-apply.
@@ -9,13 +9,9 @@
 //   3. helpers (parseDedupManufacturers, shouldDeduplicate) — exported for test coverage
 
 import * as config from "./config.ts";
-import { collections } from "./db/db.ts";
+import {collections} from "./db/db.ts";
 
-// Read-only identity paths that saveDevice must NOT overwrite with an empty string
-// when a non-empty value is already stored. Verified against Splynx codebase:
-// ProvisioningFlowRaw.php hard-skips Device.DeviceInfo.* and Device.ManagementServer.*
-// in provision diff; ACSConfig only reads these paths; factory reset / firmware upgrade /
-// reboot do not SetParameterValues on them. Protection is therefore safe.
+// Read-only identity paths that saveDevice must NOT overwrite with an empty string when a non-empty value is already stored.
 const PROTECTED_IDENTITY_PATHS: ReadonlySet<string> = new Set([
   // TR-069 Device:2.0 data model
   "Device.DeviceInfo.Manufacturer",
@@ -53,7 +49,7 @@ export function parseDedupManufacturers(
 // Empty list → feature disabled for all vendors. Match is case-insensitive on trimmed value.
 export function shouldDeduplicate(
   manufacturer: string | null | undefined,
-  dedupSet: Set<string>,
+  dedupSet: ReadonlySet<string>,
 ): boolean {
   if (!manufacturer) return false;
   if (dedupSet.size === 0) return false;
@@ -120,6 +116,13 @@ export type DedupResolution = {
   remappedFrom: string | null;
 };
 
+// Cached at module load. GenieACS reads config at startup and never mutates it at runtime,
+// so re-parsing the comma-separated list per Inform is wasted CPU. To pick up a config change,
+// the operator restarts genieacs-cwmp (which is already required for any GENIEACS_* env-var change).
+const DEDUP_MANUFACTURERS_SET: ReadonlySet<string> = parseDedupManufacturers(
+  String(config.get("DEDUPLICATION_MANUFACTURERS") ?? ""),
+);
+
 // Decides effective deviceId + reject status for an incoming Inform. Pure orchestration —
 // no logging or HTTP side effects (caller handles those at the cwmp.ts layer).
 //
@@ -132,10 +135,7 @@ export async function resolveDedup(
   informDeviceId: Record<string, string>,
   computedDeviceId: string,
 ): Promise<DedupResolution> {
-  const dedupSet = parseDedupManufacturers(
-    String(config.get("DEDUPLICATION_MANUFACTURERS") ?? ""),
-  );
-  const flagged = shouldDeduplicate(informDeviceId.Manufacturer, dedupSet);
+  const flagged = shouldDeduplicate(informDeviceId.Manufacturer, DEDUP_MANUFACTURERS_SET);
 
   if (!flagged) {
     return {
