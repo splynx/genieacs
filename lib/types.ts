@@ -148,6 +148,7 @@ export interface SessionContext {
   operationsTouched?: { [commandKey: string]: 1 | 0 };
   provisionsRet?: any[];
   doneTasks?: string[];
+  preserveIdentity?: boolean;
 }
 
 export interface Task {

@@ -8,6 +8,7 @@ import { decode, encodingExists } from "iconv-lite";
 import * as auth from "./auth.ts";
 import * as config from "./config.ts";
 import { generateDeviceId, once, setTimeoutPromise } from "./util.ts";
+import { resolveDedup } from "./dedup.ts";
 import * as soap from "./soap.ts";
 import * as session from "./session.ts";
 import {
@@ -771,6 +772,7 @@ async function endSession(sessionContext: SessionContext): Promise<void> {
       sessionContext.deviceData,
       sessionContext.new,
       sessionContext.timestamp,
+      sessionContext.preserveIdentity ?? false,
     ),
   );
 
@@ -1539,7 +1541,30 @@ async function listenerAsync(
   }
 
   stats.initiatedSessions += 1;
-  const deviceId = generateDeviceId(rpc.cpeRequest.deviceId);
+  let deviceId = generateDeviceId(rpc.cpeRequest.deviceId);
+
+  // Dedup logic centralised in lib/dedup.ts to keep upstream files thin.
+  const dedup = await resolveDedup(rpc.cpeRequest.deviceId, deviceId);
+  if (dedup.rejectReason) {
+    logger.accessWarn({
+      message: `Dedup: rejected Inform — ${dedup.rejectReason}`,
+      sessionContext: { httpRequest, httpResponse },
+    });
+    return clientError(
+      httpRequest,
+      httpResponse,
+      null,
+      bodyStr,
+      "Missing or invalid DeviceId for deduplication-enabled manufacturer",
+    );
+  }
+  if (dedup.remappedFrom) {
+    logger.accessInfo({
+      message: `Dedup: mapped Inform id ${dedup.remappedFrom} to existing ${dedup.effectiveDeviceId}`,
+      sessionContext: { httpRequest, httpResponse },
+    });
+  }
+  deviceId = dedup.effectiveDeviceId;
 
   const cacheSnapshot = await localCache.getRevision();
 
@@ -1548,6 +1573,7 @@ async function listenerAsync(
     rpc.cwmpVersion,
     rpc.sessionTimeout,
   );
+  _sessionContext.preserveIdentity = dedup.flagged;
 
   _sessionContext.cacheSnapshot = cacheSnapshot;
 
