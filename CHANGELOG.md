@@ -1,5 +1,26 @@
 # Change Log
 
+## 1.2.16 (2026-03-29)
+
+- Fix regression in v1.2.15 that broke the device search component in the UI by
+  pinning Mithril dependency to v2.2.2 due to multiple unresolved regressions in
+  later versions.
+
+## 1.2.15 (2026-03-26)
+
+- Fix critical RCE vulnerability in /api/ping endpoint (follow-up to
+  CVE-2021-46704). Credit: JuHwiSang.
+
+- Fix device IDs containing special characters (e.g., %) not being handled
+  correctly in the UI due to a regression in Mithril 2.3.8.
+
+## 1.2.14 (2026-03-12)
+
+- Prevent UI crash when a malformed URL is sent to the server.
+
+- Fix potential edge-case bugs in expression evaluation and session
+  serialization.
+
 ## 1.2.13 (2024-06-06)
 
 - Increase connection timeout for UI and NBI from 30 to 120 seconds to avoid
